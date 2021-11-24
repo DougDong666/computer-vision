@@ -1,0 +1,107 @@
+from torch import nn
+
+class VggNet16(nn.Module):
+    def __init__(self):
+        super(VggNet16, self).__init__()
+        self.Model = nn.Sequential(
+            nn.Conv2d(3,64,3,1,1),
+            nn.ReLU(),
+            nn.Conv2d(64,64,3,1,1),
+            nn.ReLU(),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(64,128,3,1,1),
+            nn.ReLU(),
+            nn.Conv2d(128,128,3,1,1),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(128,256,3,1,1),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, 3, 1, 1),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, 3, 1, 1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(256, 512, 3, 1, 1),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, 3, 1, 1),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, 3, 1, 1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(512, 512, 3, 1, 1),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, 3, 1, 1),
+            nn.ReLU(),
+            nn.Conv2d(512, 512, 3, 1, 1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Flatten(),
+            nn.Linear(512*7*7,4096),
+            nn.ReLU(),
+            nn.Linear(4096,4096),
+            nn.ReLU(),
+            nn.Linear(4096, 1000),
+        )
+    def forward(self,x):
+        x = self.Model(x)
+        return x
+
+
+class VGG(nn.Module):
+    def __init__(self,feature,num=1000,init = False):
+        super(VGG, self).__init__()
+        self.feature = feature
+        self.classify = nn.Sequential(
+            nn.Flatten(),
+            nn.Dropout(p=0.3),
+            nn.Linear(512 * 7 * 7, 4096),
+            nn.ReLU(),
+            nn.Dropout(p=0.3),
+            nn.Linear(4096, 4096),
+            nn.ReLU(),
+            nn.Dropout(p=0.3),
+            nn.Linear(4096, 1000),
+        )
+        if init:
+            self._init_weight_()
+
+
+    def forward(self,x):
+        x = self.feature(x)
+        x = self.classify(x)
+        return x
+    def _init_weight_(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                # nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                # nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
+def make_feature(clf):
+    layers = []
+    in_channels = 3
+    for m in clf:
+        if m =="M":
+            layers.append(nn.MaxPool2d(2,2))
+        else:
+            layers.append(nn.Conv2d(in_channels,m,3,1,1))
+            layers.append(nn.ReLU())
+            in_channels = m
+    return nn.Sequential(*layers)
+cfgs = {
+    'vgg11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
+    'vgg13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
+    'vgg16': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
+    'vgg19': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
+}
+def vgg(clf = 'vgg16',**kwargs):
+    print(cfgs[clf])
+    if clf not in cfgs:
+        print("瓜皮！")
+    else:
+        model = VGG(make_feature(cfgs[clf]),**kwargs)
+        return model
+print(vgg("vgg11"))
