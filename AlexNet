@@ -1,0 +1,87 @@
+import torch
+from torch import nn
+import torchvision
+from torch.utils.data import DataLoader
+import torchvision.transforms as transforms
+class AlexNet(nn.Module):
+    def __init__(self,num=1000,initial = False):
+        super(AlexNet, self).__init__()
+        self.Model = nn.Sequential(
+            nn.Conv2d(3,96,11,4,2),
+            nn.ReLU(),
+            nn.MaxPool2d(3,2),
+            nn.Conv2d(96,256,5,1,2),
+            nn.ReLU(),
+            nn.MaxPool2d(3,2),
+            nn.Conv2d(256,384,3,1,1),
+            nn.ReLU(),
+            nn.Conv2d(384,384,3,1,1),
+            nn.ReLU(),
+            nn.Conv2d(384,256,3,1,1),
+            nn.ReLU(),
+            nn.MaxPool2d(3,2),
+            nn.Flatten(),
+            nn.Dropout(p=0.3),
+            nn.Linear(6*6*256,2048),
+            nn.ReLU(),
+            nn.Dropout(p = 0.3),
+            nn.Linear(2048,num),
+        )
+        if initial:
+            self._initial_weight()
+    def forward(self,x):
+        x = self.Model(x)
+        return x
+    def _initial_weight(self):
+        for m in self.Model:
+            if isinstance(m,nn.Conv2d):
+                nn.init.kaiming_normal(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias,0)
+            if isinstance(m,nn.Linear):
+                nn.init.normal_(m.weight,0,0.01)
+                nn.init.constant_(m.bias,0)
+if __name__ == "__main__":
+    transform = transforms.Compose(
+        [transforms.ToTensor(),
+         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+    # 50000张训练图片
+    # 第一次使用时要将download设置为True才会自动去下载数据集
+    train_set = torchvision.datasets.CIFAR10(root='../data', train=True,
+                                             download=False, transform=transform)
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=36,
+                                               shuffle=True, num_workers=0)
+    test_set = torchvision.datasets.CIFAR10(root='../data', train=False,
+                                            download=False, transform=transform)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=36,
+                                              shuffle=True, num_workers=0)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("using {} device.".format(device))
+    net = AlexNet()
+    net.to(device)
+    loss_fn = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(net.parameters(),lr = 0.001)
+    epoch = 10
+    for i in range(epoch):
+        print("-------{}---------".format(i + 1))
+        total_loss = 0
+        net.train()
+        for imgs, target in train_loader:
+            out = net(imgs)
+
+            lost = loss_fn(out, target)
+            total_loss += lost
+            optimizer.zero_grad()
+            lost.backward()
+            optimizer.step()
+        print("total_loss = {}".format(total_loss))
+        train_loss = 0
+        train_accuracy = 0
+        net.eval()
+        with torch.no_grad():
+            for imgs, target in test_loader:
+                out = net(imgs)
+                lost = loss_fn(out, target)
+    save_path = './AlexNet.pth'
+    torch.save(net.state_dict(), save_path)
