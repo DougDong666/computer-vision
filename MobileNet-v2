@@ -1,0 +1,78 @@
+import torch
+from torch import nn
+
+class MobileNet(nn.Module):
+    def __init__(self,num):
+        super(MobileNet, self).__init__()
+        self.list = [
+            [1, 16, 1, 1],
+            [6, 24, 2, 2],
+            [6, 32, 3, 2],
+            [6, 64, 4, 2],
+            [6, 96, 3, 1],
+            [6, 160, 3, 2],
+            [6, 320, 1, 1],
+        ]
+        self.con1 = nn.Sequential(
+            nn.Conv2d(3,32,3,2,1),
+            nn.BatchNorm2d(32),
+            nn.ReLU6(),
+        )
+        in_channels = 32
+        layers = []
+        for t,c,n,s in self.list:
+            layers.append(self._make_bottle_blocks(in_channels,t,c,n,s))
+            in_channels = c
+        self.Model = nn.Sequential(*layers)
+        self.con2 = nn.Sequential(
+            nn.Conv2d(in_channels,1280,1,1),
+        )
+        self.avg = nn.AvgPool2d(7)
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(1280,num)
+        )
+
+
+    def _make_bottle_blocks(self,in_channels,t,c,n,s):
+        layer = []
+        for i in range(n):
+            if i == 0:
+                layer.append(BottleBlock(in_channels,c,s,t))
+                s = 1
+                in_channels = c
+            else:
+                layer.append(BottleBlock(in_channels,c,s,t))
+        return nn.Sequential(*layer)
+    def forward(self,x):
+        x = self.con1(x)
+        x = self.Model(x)
+        x = self.con2(x)
+        x = self.avg(x)
+        x = self.classifier(x)
+        return x
+
+class BottleBlock(nn.Module):
+    def __init__(self,in_channels,out_channels,stride=1,t = 1):
+        super(BottleBlock, self).__init__()
+        self.add = False
+        self.pad = (stride-1)//2
+        if in_channels == out_channels:
+            self.add = True
+        self.Model = nn.Sequential(
+            nn.Conv2d(in_channels,t*in_channels,1),
+            nn.BatchNorm2d(t*in_channels),
+            nn.ReLU6(),
+            nn.Conv2d(t*in_channels,t*in_channels,3,stride,self.pad),
+            nn.BatchNorm2d(t * in_channels),
+            nn.ReLU6(),
+            nn.Conv2d(t*in_channels,out_channels,1)
+        )
+    def forward(self,x):
+        y = self.Model(x)
+        if self.add:
+            y+=x
+        return y
+
+net = MobileNet(100)
+print(net)
